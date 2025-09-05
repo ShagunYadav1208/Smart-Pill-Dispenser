@@ -1,0 +1,131 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <Servo.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>
+#include <ArduinoJson.h>
+#include <vector>
+
+// Replace with your WiFi credentials
+const char* ssid = "yadav";
+const char* password = "#s12082003y#";
+
+// Initialize objects
+ESP8266WebServer server(80);
+Servo myServo;
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000); // IST (GMT+5:30)
+
+struct ScheduleEntry {
+  String day;
+  String time;
+};
+
+std::vector<ScheduleEntry> schedule;
+
+void rotateServoOnce() {
+  Serial.println("Rotating Servo: 0° → 90° → 0°");
+
+  myServo.attach(D4);      // Attach before rotation
+  myServo.write(0);        // Start at 0°
+  delay(300);
+  myServo.write(90);       // Rotate to 90°
+  delay(700);
+  myServo.write(0);        // Back to 0°
+  delay(300);
+  myServo.detach();        // Detach to stop jitter
+  Serial.println("Rotation complete");
+}
+
+void handleSetSchedule() {
+  if (server.hasArg("plain")) {
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, server.arg("plain"));
+
+    if (error) {
+      server.send(400, "text/plain", "Invalid JSON");
+      return;
+    }
+
+    schedule.clear();
+    for (JsonObject obj : doc.as<JsonArray>()) {
+      ScheduleEntry entry;
+      entry.day = obj["day"].as<String>();
+      entry.time = obj["time"].as<String>();
+      schedule.push_back(entry);
+    }
+
+    server.send(200, "text/plain", "Schedule received");
+    Serial.println("Schedule updated:");
+    for (auto& s : schedule) {
+      Serial.println(s.day + " @ " + s.time);
+    }
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
+
+void handleTestServo() {
+  rotateServoOnce();
+  server.send(200, "text/plain", "Test complete");
+}
+
+String getCurrentDay() {
+  time_t rawTime = timeClient.getEpochTime();
+  struct tm* timeInfo = localtime(&rawTime);
+  const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  return String(days[timeInfo->tm_wday]);
+}
+
+String getCurrentTime() {
+  char buffer[6];
+  sprintf(buffer, "%02d:%02d", timeClient.getHours(), timeClient.getMinutes());
+  return String(buffer);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  myServo.attach(D4);  // Initial attach and reset
+  myServo.write(0);
+  delay(500);
+  myServo.detach();
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
+
+  timeClient.begin();
+
+  server.on("/setSchedule", HTTP_POST, handleSetSchedule);
+  server.on("/testServo", HTTP_GET, handleTestServo);
+  server.begin();
+  Serial.println("Web server started");
+}
+
+void loop() {
+  server.handleClient();
+  timeClient.update();
+
+  String nowDay = getCurrentDay();
+  String nowTime = getCurrentTime();
+
+  static String lastTriggered = "";
+
+  for (auto& entry : schedule) {
+    if (entry.day == nowDay && entry.time == nowTime && lastTriggered != (nowDay + nowTime)) {
+      Serial.println("Scheduled match: " + entry.day + " " + entry.time);
+      rotateServoOnce();
+      lastTriggered = nowDay + nowTime;
+      break;
+    }
+  }
+
+  delay(1000); // check once per second
+}
