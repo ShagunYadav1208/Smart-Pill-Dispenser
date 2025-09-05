@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pill Dispenser Scheduler</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f9ff;
+      padding: 30px;
+    }
+
+    .container {
+      display: flex;
+      gap: 50px;
+      flex-wrap: wrap;
+    }
+
+    .frame {
+      background-color: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 320px;
+    }
+
+    .frame h3 {
+      margin-top: 0;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 15px;
+    }
+
+    .days {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .days label {
+      font-weight: normal;
+    }
+
+    input[type="number"],
+    input[type="time"],
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .time-inputs {
+      margin-top: 10px;
+    }
+
+    .schedule-list {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Pill Dispenser Scheduler</h2>
+
+  <div class="container">
+    <div class="frame">
+      <h3>Set Schedule</h3>
+      
+      <label>Select Days:</label>
+      <div class="days">
+        <label><input type="checkbox" value="Mon" /> Mon</label>
+        <label><input type="checkbox" value="Tue" /> Tue</label>
+        <label><input type="checkbox" value="Wed" /> Wed</label>
+        <label><input type="checkbox" value="Thu" /> Thu</label>
+        <label><input type="checkbox" value="Fri" /> Fri</label>
+        <label><input type="checkbox" value="Sat" /> Sat</label>
+        <label><input type="checkbox" value="Sun" /> Sun</label>
+      </div>
+
+      <label for="doseCount">Number of Doses per Day:</label>
+      <input type="number" id="doseCount" min="1" max="6" onchange="renderTimeInputs()" />
+
+      <div class="time-inputs" id="timeInputs"></div>
+
+      <button onclick="setSchedule()">Set Schedule</button>
+      <button onclick="showSchedule()">Show Schedule</button>
+    </div>
+
+    <div class="frame">
+      <h3>Schedule</h3>
+      <div id="scheduleList" class="schedule-list"></div>
+      <button onclick="testServo()">Test Servo</button>
+    </div>
+  </div>
+
+  <script>
+    let schedule = [];
+
+    function renderTimeInputs() {
+      const doseCount = parseInt(document.getElementById('doseCount').value);
+      const timeContainer = document.getElementById('timeInputs');
+      timeContainer.innerHTML = '';
+
+      for (let i = 0; i < doseCount; i++) {
+        const label = document.createElement('label');
+        label.textContent = `Time for Dose ${i + 1}:`;
+        const input = document.createElement('input');
+        input.type = 'time';
+        input.className = 'doseTime';
+        timeContainer.appendChild(label);
+        timeContainer.appendChild(input);
+      }
+    }
+
+    function setSchedule() {
+      const selectedDays = Array.from(document.querySelectorAll('.days input:checked')).map(cb => cb.value);
+      const times = Array.from(document.querySelectorAll('.doseTime')).map(inp => inp.value);
+
+      if (selectedDays.length === 0 || times.includes("")) {
+        alert("Please select at least one day and fill all dose times.");
+        return;
+      }
+
+      schedule = [];
+      selectedDays.forEach(day => {
+        times.forEach(time => {
+          schedule.push({ day, time });
+        });
+      });
+
+      fetch('/setSchedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(schedule)
+      }).then(() => alert("Schedule sent to device!"));
+    }
+
+    function showSchedule() {
+      const display = document.getElementById('scheduleList');
+      display.innerHTML = "";
+      if (schedule.length === 0) {
+        display.innerHTML = "<p>No schedule set.</p>";
+        return;
+      }
+      schedule.forEach((entry, index) => {
+        display.innerHTML += `<div>${index + 1}. ${entry.day} at ${entry.time}</div>`;
+      });
+    }
+
+    function testServo() {
+      fetch('/testServo')
+        .then(() => alert("Test command sent to servo!"));
+    }
+  </script>
+
+</body>
+</html>
